@@ -71,8 +71,20 @@ export GOARCH=amd64
 export CC=x86_64-linux-gnu-gcc
 export CXX=x86_64-linux-gnu-g++
 export PKG_CONFIG_ALLOW_CROSS=1
-export PKG_CONFIG_LIBDIR=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
-export PKG_CONFIG_PATH=
+pcdir=/usr/lib/x86_64-linux-gnu/pkgconfig
+ls -l "${pcdir}/gtk4.pc" "${pcdir}/webkitgtk-6.0.pc"
+cat > /tmp/pkg-config-amd64 <<EOF
+#!/bin/sh
+export PKG_CONFIG_LIBDIR=${pcdir}
+export PKG_CONFIG_PATH=${pcdir}
+exec /usr/bin/pkg-config "\$@"
+EOF
+chmod +x /tmp/pkg-config-amd64
+export PKG_CONFIG=/tmp/pkg-config-amd64
+export PKG_CONFIG_LIBDIR="${pcdir}"
+export PKG_CONFIG_PATH="${pcdir}"
+"${PKG_CONFIG}" --modversion gtk4
+"${PKG_CONFIG}" --cflags gtk4 webkitgtk-6.0
 go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/hiread
 file bin/hiread
 
