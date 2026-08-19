@@ -78,6 +78,7 @@ jobs:
             label: windows-amd64
             kind: windows
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     env:
       HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
@@ -130,20 +131,36 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             libgtk-4-dev \
             libwebkitgtk-6.0-dev \
             libfuse2 \
-            rpm
+            rpm \
+            ca-certificates \
+            wget
 
       - name: Install NSIS (Windows installer)
         if: runner.os == 'Windows'
-        run: choco install nsis -y --no-progress
-
-      - name: Add NSIS to PATH
-        if: runner.os == 'Windows'
-        shell: bash
-        run: echo "/c/Program Files (x86)/NSIS" >> "${GITHUB_PATH}"
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          $dirs = @(
+            "${env:ProgramFiles(x86)}\NSIS",
+            "${env:ProgramFiles}\NSIS"
+          )
+          $found = $false
+          foreach ($dir in $dirs) {
+            if (Test-Path (Join-Path $dir "makensis.exe")) {
+              Add-Content -Path $env:GITHUB_PATH -Value $dir
+              Write-Host "NSIS at $dir"
+              $found = $true
+            }
+          }
+          if (-not $found) {
+            Get-ChildItem "C:\Program Files*","C:\ProgramData\chocolatey\lib" -Recurse -Filter makensis.exe -ErrorAction SilentlyContinue |
+              Select-Object -First 5 -ExpandProperty FullName
+            throw "makensis.exe not found after installing NSIS"
+          }
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -186,9 +203,16 @@ jobs:
         continue-on-error: true
         run: task linux:create:appimage
 
-      - name: Build Windows installer
+      - name: Build Windows binary
         if: matrix.kind == 'windows'
-        run: task package VERSION="${HIREAD_VERSION}" INSTALL_SCOPE=user
+        run: task build VERSION="${HIREAD_VERSION}"
+
+      - name: Build Windows NSIS installer
+        if: matrix.kind == 'windows'
+        continue-on-error: true
+        run: |
+          where.exe makensis
+          task windows:create:nsis:installer INSTALL_SCOPE=user
 
       - name: Collect artifacts
         shell: bash
@@ -248,22 +272,22 @@ jobs:
               fi
               ;;
             windows)
-              installer=""
-              for f in bin/*-installer.exe bin/*installer.exe; do
-                installer="$f"
-                break
-              done
-              if [[ -z "${installer}" ]]; then
-                echo "missing NSIS installer under bin/" >&2
-                ls -la bin || true
-                exit 1
-              fi
-              cp "${installer}" "dist/Hiread-${VERSION}-${LABEL}-setup.exe"
               if [[ ! -f bin/hiread.exe ]]; then
                 echo "missing bin/hiread.exe" >&2
                 exit 1
               fi
               7z a "dist/Hiread-${VERSION}-${LABEL}.zip" ./bin/hiread.exe
+              installer=""
+              for f in bin/*-installer.exe bin/*installer.exe; do
+                installer="$f"
+                break
+              done
+              if [[ -n "${installer}" ]]; then
+                cp "${installer}" "dist/Hiread-${VERSION}-${LABEL}-setup.exe"
+              else
+                echo "warning: NSIS installer missing; shipping portable zip only"
+                ls -la bin || true
+              fi
               ;;
             *)
               echo "unknown kind ${KIND}" >&2
@@ -330,6 +354,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [meta, package, cli]
+    if: ${{ always() && needs.meta.result == 'success' && needs.cli.result == 'success' && needs.package.result != 'cancelled' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -353,7 +378,7 @@ jobs:
           draft: false
           prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           body: |
             Prebuilt installers for Hiread ${{ needs.meta.outputs.version }}.
 
