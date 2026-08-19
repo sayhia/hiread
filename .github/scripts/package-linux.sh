@@ -17,7 +17,8 @@ sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty
   install -y --no-install-recommends \
     ca-certificates curl git gcc libc6-dev pkg-config xz-utils \
     gcc-x86-64-linux-gnu g++-x86-64-linux-gnu \
-    rpm wget python3 file
+    rpm wget python3 file \
+    x11proto-dev xtrans-dev pkgconf
 
 sudo dpkg --add-architecture amd64
 if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then
@@ -73,17 +74,19 @@ export CC=x86_64-linux-gnu-gcc
 export CXX=x86_64-linux-gnu-g++
 export PKG_CONFIG_ALLOW_CROSS=1
 pcdir=/usr/lib/x86_64-linux-gnu/pkgconfig
+# Arch-independent proto .pc files live in /usr/share/pkgconfig.
+pclib="${pcdir}:/usr/share/pkgconfig"
 ls -l "${pcdir}/gtk4.pc" "${pcdir}/webkitgtk-6.0.pc"
 cat > /tmp/pkg-config-amd64 <<EOF
 #!/bin/sh
-export PKG_CONFIG_LIBDIR=${pcdir}
-export PKG_CONFIG_PATH=${pcdir}
+export PKG_CONFIG_LIBDIR=${pclib}
+export PKG_CONFIG_PATH=${pclib}
 exec /usr/bin/pkg-config "\$@"
 EOF
 chmod +x /tmp/pkg-config-amd64
 export PKG_CONFIG=/tmp/pkg-config-amd64
-export PKG_CONFIG_LIBDIR="${pcdir}"
-export PKG_CONFIG_PATH="${pcdir}"
+export PKG_CONFIG_LIBDIR="${pclib}"
+export PKG_CONFIG_PATH="${pclib}"
 "${PKG_CONFIG}" --modversion gtk4
 "${PKG_CONFIG}" --cflags gtk4 webkitgtk-6.0
 go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/hiread
