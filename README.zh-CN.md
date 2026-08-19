@@ -142,7 +142,8 @@ hiread/
 
 | 平台 | 文件 |
 | --- | --- |
-| macOS 12+（Apple Silicon + Intel） | `Hiread-*-macOS.dmg` |
+| macOS 12+ Apple 芯片（M 系列） | `Hiread-*-macOS-AppleSilicon.dmg` |
+| macOS 12+ Intel | `Hiread-*-macOS-Intel.dmg` |
 | Windows 10+（x64） | `Hiread-*-windows-amd64-setup.exe` |
 | Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
 

@@ -66,8 +66,15 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            label: darwin-universal
+            label: darwin-arm64
             kind: macos
+            arch: arm64
+            mac_name: AppleSilicon
+          - os: macos-latest
+            label: darwin-amd64
+            kind: macos
+            arch: amd64
+            mac_name: Intel
           # ubuntu-24.04 x64 hangs installing GTK/WebKit -dev. Cross-compile
           # amd64 on the ARM runner (native Go + amd64 GTK sysroot).
           - os: ubuntu-24.04-arm
@@ -211,9 +218,12 @@ jobs:
           chmod +x .github/scripts/package-linux.sh
           .github/scripts/package-linux.sh
 
-      - name: Package macOS universal app
+      - name: Package macOS app
         if: matrix.kind == 'macos'
-        run: task darwin:package:universal VERSION="${HIREAD_VERSION}"
+        run: |
+          task darwin:package ARCH="${{ matrix.arch }}" VERSION="${HIREAD_VERSION}"
+          echo "archs=$(lipo -archs bin/hiread.app/Contents/MacOS/hiread)"
+          lipo -archs bin/hiread.app/Contents/MacOS/hiread | grep -q "${{ matrix.arch == 'amd64' && 'x86_64' || 'arm64' }}"
 
       - name: Build Linux binary and installers
         if: matrix.kind == 'linux'
@@ -250,6 +260,7 @@ jobs:
           LABEL: ${{ matrix.label }}
           KIND: ${{ matrix.kind }}
           VERSION: ${{ needs.meta.outputs.version }}
+          MAC_NAME: ${{ matrix.mac_name }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -260,15 +271,15 @@ jobs:
                 echo "missing bin/hiread.app" >&2
                 exit 1
               fi
-              ditto -c -k --keepParent bin/hiread.app "dist/Hiread-${VERSION}-macOS.zip"
+              ditto -c -k --keepParent bin/hiread.app "dist/Hiread-${VERSION}-macOS-${MAC_NAME}.zip"
               mkdir -p dmgroot
               ditto bin/hiread.app dmgroot/Hiread.app
               ln -s /Applications dmgroot/Applications
               hdiutil create \
-                -volname "Hiread" \
+                -volname "Hiread ${MAC_NAME}" \
                 -srcfolder dmgroot \
                 -ov -format UDZO \
-                "dist/Hiread-${VERSION}-macOS.dmg"
+                "dist/Hiread-${VERSION}-macOS-${MAC_NAME}.dmg"
               ;;
             linux)
               found=0
@@ -414,7 +425,8 @@ jobs:
 
             | Platform | Installer |
             | --- | --- |
-            | macOS 12+ (Apple Silicon + Intel) | `Hiread-${{ needs.meta.outputs.version }}-macOS.dmg` |
+            | macOS 12+ Apple 芯片 | `Hiread-${{ needs.meta.outputs.version }}-macOS-AppleSilicon.dmg` |
+            | macOS 12+ Intel | `Hiread-${{ needs.meta.outputs.version }}-macOS-Intel.dmg` |
             | Windows 10+ (x64) | `Hiread-${{ needs.meta.outputs.version }}-windows-amd64-setup.exe` |
             | Linux x64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
             | Linux ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |

@@ -1,0 +1,166 @@
+name: Release macOS
+
+# Build per-chip macOS installers (Apple Silicon + Intel) and attach them
+# to an existing GitHub Release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to upload to"
+        required: true
+        default: "v0.1.0"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  WAILS3_VERSION: v3.0.0-alpha2.103
+
+jobs:
+  package:
+    name: Package macOS ${{ matrix.mac_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            mac_name: AppleSilicon
+            lipo_arch: arm64
+          - arch: amd64
+            mac_name: Intel
+            lipo_arch: x86_64
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve version
+        id: v
+        run: |
+          TAG="${{ inputs.tag }}"
+          [[ "${TAG}" == v* ]] || TAG="v${TAG}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Stamp version
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+          version = os.environ["VERSION"]
+
+          def sub(path, pattern, repl, count=0):
+              p = pathlib.Path(path)
+              text = p.read_text(encoding="utf-8")
+              new, n = re.subn(pattern, repl, text, count=count, flags=re.M)
+              if n == 0:
+                  sys.exit(f"no match in {path}: {pattern}")
+              p.write_text(new, encoding="utf-8")
+
+          sub("services/update.go", r'var appVersion = "[^"]+"', f'var appVersion = "{version}"')
+          sub(
+              "build/darwin/Info.plist",
+              r"(<key>CFBundleVersion</key>\s*<string>)[^<]+",
+              rf"\g<1>{version}",
+          )
+          sub(
+              "build/darwin/Info.plist",
+              r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]+",
+              rf"\g<1>{version}",
+          )
+          print(f"stamped {version}")
+          PY
+
+      - name: Stub embedded frontend assets
+        run: |
+          mkdir -p frontend/dist
+          echo '<!doctype html><title>release stub</title>' > frontend/dist/index.html
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails3 CLI and Task
+        run: |
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
+
+      - name: Package ${{ matrix.mac_name }}
+        env:
+          HIREAD_VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          task darwin:package ARCH="${{ matrix.arch }}" VERSION="${HIREAD_VERSION}"
+          archs="$(lipo -archs bin/hiread.app/Contents/MacOS/hiread)"
+          echo "built archs: ${archs}"
+          echo "${archs}" | grep -qw "${{ matrix.lipo_arch }}"
+
+      - name: Collect artifacts
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          MAC_NAME: ${{ matrix.mac_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          ditto -c -k --keepParent bin/hiread.app "dist/Hiread-${VERSION}-macOS-${MAC_NAME}.zip"
+          mkdir -p dmgroot
+          ditto bin/hiread.app dmgroot/Hiread.app
+          ln -s /Applications dmgroot/Applications
+          hdiutil create \
+            -volname "Hiread ${MAC_NAME}" \
+            -srcfolder dmgroot \
+            -ov -format UDZO \
+            "dist/Hiread-${VERSION}-macOS-${MAC_NAME}.dmg"
+          ls -lh dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiread-macos-${{ matrix.mac_name }}
+          path: dist/*
+          if-no-files-found: error
+
+  upload:
+    name: Attach to GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload and replace universal assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "${TAG}" == v* ]] || TAG="v${TAG}"
+          ls -lh dist
+          gh release upload "${TAG}" dist/* --clobber
+          # Drop the old combined macOS files if they are still on the release.
+          gh release delete-asset "${TAG}" "Hiread-${TAG#v}-macOS.dmg" --yes || true
+          gh release delete-asset "${TAG}" "Hiread-${TAG#v}-macOS.zip" --yes || true
+          tmp=$(mktemp)
+          gh release download "${TAG}" --pattern SHA256SUMS.txt --output "${tmp}" || true
+          {
+            if [[ -s "${tmp}" ]]; then
+              grep -Ev 'Hiread-.*-macOS([-.]|$)' "${tmp}" || true
+            fi
+            (cd dist && sha256sum *)
+          } | sort -k2 > SHA256SUMS.txt
+          gh release upload "${TAG}" SHA256SUMS.txt --clobber
+          gh release view "${TAG}"
