@@ -3,18 +3,34 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/workflows/release*.yml"
+      - ".github/scripts/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/workflows/release*.yml"
+      - ".github/scripts/**"
+
+# A new push should kill the previous CI, not let a hung apt job burn 6 hours.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   frontend:
     name: Type-check, build & test frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -36,17 +52,24 @@ jobs:
 
   go:
     name: vet, test & build Go
-    runs-on: ubuntu-latest
+    # ubuntu-latest (x64) hangs for hours on libgtk-4-dev / libwebkitgtk-6.0-dev
+    # and the default job timeout is 6h — that is what burned ~1700 Linux minutes.
+    # ARM apt works and is billed cheaper.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # Wails v3 links against GTK4 + WebKitGTK 6.0 via cgo on Linux; without
-      # these headers `go vet`/`test`/`build` of the main package fail at
-      # pkg-config ("Package 'gtk4' ... not found").
       - name: Install system dependencies (GTK4 + WebKitGTK 6.0)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections || true
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get \
+            -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get \
+            -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 \
+            install -y --no-install-recommends \
+              libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -55,8 +78,6 @@ jobs:
           cache: true
 
       # main.go has `//go:embed all:frontend/dist`, but the dir is gitignored.
-      # A placeholder satisfies the embed for these compile-only checks (the real
-      # dist is produced by the frontend job / a packaged build).
       - name: Stub embedded frontend assets
         run: |
           mkdir -p frontend/dist

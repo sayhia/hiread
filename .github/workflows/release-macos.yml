@@ -130,6 +130,7 @@ jobs:
           name: hiread-macos-${{ matrix.mac_name }}
           path: dist/*
           if-no-files-found: error
+          retention-days: 3
 
   upload:
     name: Attach to GitHub Release
