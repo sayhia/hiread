@@ -42,7 +42,8 @@ sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty
     libwebkitgtk-6.0-dev:amd64
 
 export PATH="$(go env GOPATH)/bin:${PATH}"
-go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
+# The CLI pulls linux cgo packages if CGO is on; we have no host GTK.
+CGO_ENABLED=0 go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
 
 python3 - <<'PY'
 import os, pathlib, re, sys
