@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Produce linux/amd64 desktop packages on an ARM host by cross-compiling.
-# Native x64 Ubuntu runners hang on apt; qemu-user cannot run modern Go
-# (fatal error: taggedPointerPack). Bindings/frontend build natively; the
-# Wails binary is linked with the amd64 GTK/WebKit sysroot.
+# Bindings are committed, so we do not need host GTK headers. Only the
+# amd64 GTK/WebKit -dev sysroot is installed (multiarch -dev packages
+# cannot sit next to their arm64 twins — they share /usr/include).
 set -euxo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
-export APPIMAGE_EXTRACT_AND_RUN=1
 HIREAD_VERSION="${HIREAD_VERSION:?HIREAD_VERSION is required}"
 WAILS3_VERSION="${WAILS3_VERSION:-v3.0.0-alpha2.103}"
 
@@ -17,13 +16,10 @@ sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty
 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 \
   install -y --no-install-recommends \
     ca-certificates curl git gcc libc6-dev pkg-config xz-utils \
-    libgtk-4-dev libwebkitgtk-6.0-dev \
     gcc-x86-64-linux-gnu g++-x86-64-linux-gnu \
     rpm wget python3 file
 
 sudo dpkg --add-architecture amd64
-# ports.ubuntu.com has no amd64 indexes. Pin existing ARM sources to arm64
-# and add archive.ubuntu.com for the x64 GTK/WebKit sysroot.
 if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then
   if ! grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources; then
     sudo sed -i 's/^Types:/Architectures: arm64\nTypes:/' /etc/apt/sources.list.d/ubuntu.sources
@@ -43,17 +39,10 @@ sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty
 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 \
   install -y --no-install-recommends \
     libgtk-4-dev:amd64 \
-    libwebkitgtk-6.0-dev:amd64 \
-    libfuse2:amd64
+    libwebkitgtk-6.0-dev:amd64
 
 export PATH="$(go env GOPATH)/bin:${PATH}"
 go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
-go install github.com/go-task/task/v3/cmd/task@latest
-
-mkdir -p frontend/dist
-if [[ ! -f frontend/dist/index.html ]]; then
-  echo '<!doctype html><title>release stub</title>' > frontend/dist/index.html
-fi
 
 python3 - <<'PY'
 import os, pathlib, re, sys
@@ -72,11 +61,10 @@ sub("build/linux/nfpm/nfpm.yaml", r'^version:\s*".*"', f'version: "{version}"', 
 print(f"stamped {version}")
 PY
 
-# Frontend + bindings on the native arch (needs host GTK headers).
-task common:build:frontend
-task linux:generate:dotdesktop
+# Bindings are committed; just bundle the Vue app.
+(cd frontend && npm ci && npm run build)
 
-# Cross-link the production binary against the amd64 GTK/WebKit stack.
+mkdir -p bin
 export CGO_ENABLED=1
 export GOOS=linux
 export GOARCH=amd64
@@ -88,12 +76,19 @@ export PKG_CONFIG_PATH=
 go build -tags production -trimpath -buildvcs=false -ldflags="-w -s" -o bin/hiread
 file bin/hiread
 
-# nfpm reads GOARCH for the package architecture.
+if ! command -v wails3 >/dev/null; then
+  echo "wails3 missing" >&2
+  exit 1
+fi
+# .desktop file for nfpm
+mkdir -p build/linux
+wails3 generate .desktop -name hiread -exec hiread -icon hiread \
+  -outputfile build/linux/hiread.desktop -categories "Office;Viewer;"
+
 wails3 tool package -name hiread -format deb -config ./build/linux/nfpm/nfpm.yaml -out bin
 wails3 tool package -name hiread -format rpm -config ./build/linux/nfpm/nfpm.yaml -out bin
 wails3 tool package -name hiread -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out bin || true
 
-# AppImage tooling is x86_64; skip rather than run it under qemu.
 shopt -s nullglob
 mkdir -p dist
 label="linux-amd64"
