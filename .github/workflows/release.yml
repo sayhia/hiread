@@ -81,7 +81,7 @@ jobs:
     env:
       HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Stamp version into packaging metadata
         shell: bash
@@ -96,7 +96,7 @@ jobs:
           def sub(path: str, pattern: str, repl: str, count: int = 0) -> None:
               p = pathlib.Path(path)
               text = p.read_text(encoding="utf-8")
-              new, n = re.subn(pattern, repl, text, count=count)
+              new, n = re.subn(pattern, repl, text, count=count, flags=re.M)
               if n == 0:
                   sys.exit(f"no match in {path}: {pattern}")
               p.write_text(new, encoding="utf-8")
@@ -286,7 +286,7 @@ jobs:
     env:
       HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Go
         uses: actions/setup-go@v5
