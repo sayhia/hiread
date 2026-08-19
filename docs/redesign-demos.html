@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hiread · 十套重构 Demo</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,560;1,6..72,400&family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;600&display=swap");
+
+  :root {
+    --bg: #11110f;
+    --fg: #ece8df;
+    --dim: #8a8478;
+    font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+  body { display: grid; grid-template-rows: auto 1fr; }
+
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 24px; padding: 16px 22px 12px; border-bottom: 1px solid #2a2824;
+  }
+  header h1 { margin: 0; font-size: 14px; font-weight: 560; letter-spacing: .08em; text-transform: uppercase; color: #b7b0a4; }
+  header p { margin: 0; font-size: 12.5px; color: var(--dim); }
+
+  .ui { display: grid; grid-template-columns: 220px 1fr; min-height: 0; }
+  nav { padding: 14px 10px; border-right: 1px solid #2a2824; overflow: auto; }
+  nav button {
+    display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start;
+    width: 100%; text-align: left; border: 0; background: transparent;
+    color: #9c968b; padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: 13px;
+  }
+  nav button small { display: block; font-size: 11px; color: #6b665c; font-weight: 400; margin-top: 1px; }
+  nav button:hover { background: #1c1b18; color: #e8e2d6; }
+  nav button[aria-pressed="true"] { background: #24221d; color: #f3eee4; }
+  nav .n { font-variant-numeric: tabular-nums; color: #6b665c; font-size: 11px; padding-top: 3px; }
+
+  .stage { padding: 18px 20px 24px; overflow: auto; }
+  .cap { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; gap: 16px; }
+  .cap h2 { margin: 0; font-family: "Instrument Serif", "Noto Serif SC", serif; font-size: 28px; font-weight: 400; letter-spacing: -.02em; }
+  .cap p { margin: 4px 0 0; color: var(--dim); font-size: 13px; max-width: 62ch; line-height: 1.5; }
+  .toggle { display: flex; gap: 6px; }
+  .toggle button {
+    border: 1px solid #3a372f; background: transparent; color: #b7b0a4;
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .toggle button[aria-pressed="true"] { background: #ece8df; color: #16140f; border-color: #ece8df; }
+
+  .win {
+    width: min(1120px, 100%);
+    height: min(680px, calc(100vh - 180px));
+    min-height: 560px;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 40px 90px -30px #000, 0 0 0 1px rgba(255,255,255,.06);
+    display: flex; flex-direction: column;
+  }
+  .traffic { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 13px; flex: none; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .r { background: #ff5f57; } .y { background: #febc2e; } .g { background: #28c840; }
+  .wt { margin-left: 8px; font-size: 11.5px; opacity: .45; }
+  .app { flex: 1; min-height: 0; display: flex; }
+
+  .bk {
+    position: relative; overflow: hidden;
+    background:
+      linear-gradient(90deg, rgba(0,0,0,.28) 0 8px, transparent 18px),
+      linear-gradient(180deg, rgba(255,255,255,.08), transparent 40%),
+      hsl(var(--h, 30) var(--s, 28%) var(--l, 32%));
+    color: #f4efe6;
+    box-shadow: inset -10px 0 16px rgba(0,0,0,.15);
+  }
+  .bk em { font-style: normal; font-family: "Noto Serif SC", serif; font-weight: 600; letter-spacing: .08em; }
+  .bk small { display: block; opacity: .72; font-size: .72em; margin-top: .35em; letter-spacing: .04em; }
+
+  /* ========== 01 卷 ========== */
+  .juan { background: #c9b896; }
+  .juan .traffic { background: #c9b896; }
+  .juan .app { background: #d8c7a4 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.8' /%3E%3C/filter%3E%3Crect width='80' height='80' filter='url(%23n)' opacity='.06'/%3E%3C/svg%3E"); }
+  .juan .scroll {
+    display: flex; align-items: stretch; gap: 0; padding: 28px 40px;
+    overflow: hidden; width: 100%;
+  }
+  .juan .rod { width: 18px; border-radius: 9px; background: linear-gradient(90deg, #3a2a18, #6a4e2c 40%, #2c1e10); box-shadow: 0 8px 16px rgba(0,0,0,.25); }
+  .juan .silk { flex: 1; display: flex; justify-content: flex-end; gap: 22px; padding: 10px 28px; }
+  .juan .slip {
+    writing-mode: vertical-rl; height: 100%;
+    background: #f3ead4; color: #2a1c10;
+    padding: 22px 14px; border-radius: 2px;
+    box-shadow: 2px 6px 14px rgba(40,20,0,.18);
+    font-family: "Noto Serif SC", serif;
+    border-left: 3px solid #8b2c1e;
+  }
+  .juan .slip b { font-size: 18px; font-weight: 700; letter-spacing: .25em; }
+  .juan .slip i { font-style: normal; font-size: 12px; opacity: .55; margin-top: 12px; letter-spacing: .15em; }
+  .juan .reader { flex: 1; writing-mode: vertical-rl; padding: 36px 64px; font-family: "Noto Serif SC", serif; font-size: 18px; line-height: 2.05; color: #23180e; background: #efe4c8; }
+
+  /* ========== 02 案 ========== */
+  .an { background: #3c2a1c; }
+  .an .traffic { background: #2d1e14; }
+  .an .wt { color: #cbb8a0; }
+  .an .app { background: linear-gradient(180deg, #4a3424, #2a1c12 40%, #21160f); color: #f0e4d4; }
+  .an .desk { flex: 1; display: grid; grid-template-columns: 220px 1fr; }
+  .an .list { padding: 22px 14px; font-size: 13.5px; }
+  .an .list div { padding: 8px 10px; border-radius: 4px; color: #cbb8a0; }
+  .an .list .on { background: rgba(255,220,170,.1); color: #fff6e8; }
+  .an .stage2 { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+  .an .open {
+    width: 380px; height: 280px; display: grid; grid-template-columns: 1fr 1fr;
+    background: #f6ecd8; color: #2b2116; border-radius: 2px 8px 8px 2px;
+    box-shadow: 0 30px 50px rgba(0,0,0,.45);
+    font-family: "Noto Serif SC", serif; font-size: 13px; line-height: 1.85;
+  }
+  .an .open > div { padding: 22px 18px; }
+  .an .open > div:first-child { border-right: 1px solid rgba(40,20,0,.12); }
+  .an .meta { font-size: 12px; letter-spacing: .2em; color: #cbb8a0; }
+
+  /* ========== 03 刊 ========== */
+  .kan { background: #f4f1ea; color: #161512; }
+  .kan .traffic { background: #f4f1ea; }
+  .kan .app { background: #f7f4ee; }
+  .kan .hero { flex: 1; display: grid; grid-template-columns: 1.05fr .95fr; }
+  .kan .hero-cover { margin: 28px 0 28px 28px; }
+  .kan .hero-cover .bk { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 28px; font-size: 28px; }
+  .kan .copy { padding: 48px 40px 28px; display: flex; flex-direction: column; }
+  .kan .kicker { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: #8a8378; }
+  .kan h3 { font-family: "Instrument Serif", "Noto Serif SC", serif; font-size: 48px; font-weight: 400; margin: 10px 0 6px; letter-spacing: -.03em; }
+  .kan .by { color: #6b655c; margin-bottom: 22px; }
+  .kan .go { align-self: flex-start; background: #161512; color: #f4f1ea; border: 0; border-radius: 999px; padding: 10px 18px; font-size: 13px; }
+  .kan .more { margin-top: auto; display: grid; gap: 8px; font-size: 13.5px; }
+  .kan .more div { display: flex; justify-content: space-between; border-top: 1px solid #e4dfd4; padding-top: 8px; color: #5c574e; }
+  .kan .reader { flex: 1; display: grid; grid-template-columns: 200px 1fr; }
+  .kan .toc { padding: 36px 22px; font-size: 13px; color: #6b655c; border-right: 1px solid #e4dfd4; }
+  .kan .article { padding: 48px 80px; font-family: "Newsreader", "Noto Serif SC", serif; font-size: 19px; line-height: 1.7; max-width: 680px; }
+
+  /* ========== 04 线 ========== */
+  .xian { background: #fff; color: #111; }
+  .xian .traffic { background: #fff; border-bottom: 1px solid #111; }
+  .xian .app { background: #fff; }
+  .xian .idx { width: 200px; border-right: 1px solid #111; padding: 24px 0; }
+  .xian .idx b { display: block; padding: 0 18px 16px; font-size: 12px; letter-spacing: .16em; }
+  .xian .idx div { padding: 8px 18px; font-size: 13px; border-top: 1px solid #eee; }
+  .xian .idx .on { background: #111; color: #fff; }
+  .xian .table { flex: 1; display: flex; flex-direction: column; }
+  .xian .th, .xian .tr { display: grid; grid-template-columns: 2fr 1fr .6fr .5fr; padding: 11px 22px; font-size: 13.5px; border-bottom: 1px solid #111; }
+  .xian .th { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+  .xian .tr:hover { background: #f6f6f6; }
+  .xian .reader { flex: 1; padding: 72px 120px; font-family: "Newsreader", serif; font-size: 18px; line-height: 1.75; }
+
+  /* ========== 05 廊 ========== */
+  .lang { background: #0e0e0c; color: #f2eee6; }
+  .lang .traffic { background: #0e0e0c; }
+  .lang .app { background: #141410; align-items: stretch; }
+  .lang .film { display: flex; gap: 14px; padding: 48px 28px; overflow: hidden; width: 100%; }
+  .lang .film .bk { width: 168px; flex: none; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px; font-size: 16px; border-radius: 2px; }
+  .lang .film .bk.on { width: 240px; outline: 1px solid #f2eee6; }
+  .lang .reader { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; background: #0c0c0a; }
+  .lang .sheet { height: 78%; background: #f4efe4; color: #1b1712; border-radius: 18px 18px 0 0; padding: 36px 56px; font-family: "Newsreader", "Noto Serif SC", serif; font-size: 17px; line-height: 1.8; }
+
+  /* ========== 06 目 ========== */
+  .mu { background: #efe6d2; color: #1c140c; }
+  .mu .traffic { background: #e6dcc4; }
+  .mu .app { background: #efe6d2; }
+  .mu .mulu {
+    width: 42%; writing-mode: vertical-rl;
+    padding: 28px 32px; font-family: "Noto Serif SC", serif;
+    font-size: 20px; letter-spacing: .28em; line-height: 2.1;
+    border-left: 1px solid rgba(40,20,0,.12);
+  }
+  .mu .mulu span { display: inline-block; padding: 0 6px; }
+  .mu .mulu .on { background: #8b2c1e; color: #f6ecd8; }
+  .mu .sel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+  .mu .sel .bk { width: 200px; height: 280px; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; font-size: 22px; }
+  .mu .sel p { margin: 0; font-size: 13px; color: #6a5a44; max-width: 28ch; text-align: center; line-height: 1.6; }
+  .mu .reader { flex: 1; writing-mode: vertical-rl; padding: 32px 72px; font-family: "Noto Serif SC", serif; font-size: 18px; line-height: 2; background: #f6eedc; }
+
+  /* ========== 07 舱 ========== */
+  .cang { background: #070b12; color: #dce6f2; }
+  .cang .traffic { background: #070b12; }
+  .cang .app { background: radial-gradient(900px 380px at 70% 0%, #1a2740, #070b12 60%); flex-direction: column; }
+  .cang .now { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+  .cang .now .bk { width: 220px; height: 300px; display: flex; flex-direction: column; justify-content: flex-end; padding: 22px; font-size: 24px; border-radius: 6px; box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+  .cang .now h3 { margin: 18px 0 4px; font-weight: 500; font-size: 18px; }
+  .cang .now s { text-decoration: none; font-size: 12px; color: #8aa0b8; }
+  .cang .dock { height: 108px; display: flex; gap: 10px; padding: 8px 20px 16px; }
+  .cang .dock .bk { width: 64px; height: 88px; border-radius: 3px; font-size: 0; }
+  .cang .reader { flex: 1; padding: 48px 80px 24px; font-size: 17px; line-height: 1.85; color: #d5deea; }
+  .cang .dock2 { height: 92px; display: flex; gap: 8px; padding: 0 24px 16px; }
+  .cang .dock2 .bk { width: 56px; height: 76px; font-size: 0; }
+
+  /* ========== 08 架 ========== */
+  .jia { background: #2a2118; }
+  .jia .traffic { background: #211910; }
+  .jia .wt { color: #d8c4a4; }
+  .jia .app { background: linear-gradient(#4a3828, #2c2118); flex-direction: column; padding: 18px 22px 16px; gap: 14px; }
+  .jia .row { display: flex; align-items: flex-end; height: 118px; padding: 0 8px 0; background: linear-gradient(#3a2c20, #2a2018); box-shadow: inset 0 -10px 0 #1a120c, 0 10px 0 #1a120c; }
+  .jia .spine {
+    width: 28px; height: 100%; margin: 0 2px;
+    background: linear-gradient(90deg, rgba(0,0,0,.35), transparent 30%, rgba(255,255,255,.08)),
+      hsl(var(--h) 32% 30%);
+    writing-mode: vertical-rl; color: #f3e6d0; font-size: 11px;
+    letter-spacing: .18em; display: flex; align-items: center; justify-content: center;
+    font-family: "Noto Serif SC", serif; box-shadow: 2px 0 0 rgba(0,0,0,.25);
+  }
+  .jia .spine.w { width: 42px; }
+  .jia .reader { flex: 1; background: #cbb896; margin: 4px 8px 0; display: flex; align-items: center; justify-content: center; }
+  .jia .spread { width: 520px; height: 320px; display: grid; grid-template-columns: 1fr 1fr; background: #f4ead4; box-shadow: 0 20px 40px rgba(0,0,0,.35); font-family: "Noto Serif SC", serif; font-size: 14px; line-height: 1.9; color: #2a1e12; }
+  .jia .spread div { padding: 24px 20px; }
+  .jia .spread div:first-child { border-right: 1px solid rgba(40,20,0,.12); }
+
+  /* ========== 09 間 ========== */
+  .ma { background: #e7ebe4; color: #1c211c; }
+  .ma .traffic { background: #e7ebe4; }
+  .ma .app { background: #eef1ea; flex-direction: column; padding: 8px 0; }
+  .ma .row2 { flex: 1; display: grid; grid-template-columns: 120px 1fr; gap: 36px; align-items: center; padding: 0 80px; border-bottom: 1px solid rgba(20,30,20,.08); }
+  .ma .row2 .bk { height: 150px; display: flex; flex-direction: column; justify-content: flex-end; padding: 12px; font-size: 14px; }
+  .ma .row2 h3 { margin: 0 0 6px; font-family: "Instrument Serif", "Noto Serif SC", serif; font-size: 40px; font-weight: 400; letter-spacing: -.03em; }
+  .ma .row2 p { margin: 0; color: #5c655c; font-size: 14px; }
+  .ma .reader { flex: 1; padding: 80px 140px; font-family: "Newsreader", "Noto Serif SC", serif; font-size: 20px; line-height: 1.8; }
+
+  /* ========== 10 帖 ========== */
+  .tie { background: #f2e6d4; color: #21160e; }
+  .tie .traffic { background: #eadcc4; }
+  .tie .app { background: #f2e6d4; align-items: center; justify-content: center; position: relative; }
+  .tie .spread2 { position: relative; width: 760px; height: 420px; }
+  .tie .pg {
+    position: absolute; inset: 0;
+    background: #fbf3e2; border: 1px solid rgba(40,20,0,.1);
+    box-shadow: 8px 12px 0 rgba(40,20,0,.06);
+    padding: 28px 32px;
+  }
+  .tie .pg:nth-child(1) { transform: translate(-18px, 16px) rotate(-2deg); }
+  .tie .pg:nth-child(2) { transform: translate(10px, -8px) rotate(1.4deg); }
+  .tie .pg:nth-child(3) { transform: none; display: grid; grid-template-columns: 180px 1fr; gap: 24px; }
+  .tie .pg .bk { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px; font-size: 18px; }
+  .tie .seal { width: 36px; height: 36px; background: #9c2a1c; color: #f6e6c8; display: grid; place-items: center; font-family: "Noto Serif SC", serif; font-size: 13px; margin-top: 20px; }
+  .tie .reader { flex: 1; display: grid; grid-template-columns: 1fr 1fr; background: #f6edd8; }
+  .tie .reader > div { padding: 40px 36px; font-family: "Noto Serif SC", serif; font-size: 16px; line-height: 1.95; }
+  .tie .reader > div:first-child { border-right: 1px solid rgba(40,20,0,.1); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hiread · 十套全重构</h1>
+  <p>样式和布局都换。左栏选方案，右上切书库 / 阅读。封面是装帧示意。</p>
+</header>
+<div class="ui">
+  <nav id="nav"></nav>
+  <div class="stage">
+    <div class="cap">
+      <div>
+        <h2 id="title"></h2>
+        <p id="blurb"></p>
+      </div>
+      <div class="toggle">
+        <button type="button" data-v="lib" aria-pressed="true">书库</button>
+        <button type="button" data-v="read" aria-pressed="false">阅读</button>
+      </div>
+    </div>
+    <div id="frame"></div>
+  </div>
+</div>
+<script>
+const S = [
+  { id: "juan", n: "01", name: "卷", blurb: "整库是一幅横轴。书是題簽，从右往左挂。阅读即展卷，竖排满幅，没有西式网格。" },
+  { id: "an", n: "02", name: "案", blurb: "书案。左边细目，中间摊开正在读的那本。书库不是货架，是书桌上的一件事。" },
+  { id: "kan", n: "03", name: "刊", blurb: "杂志封面故事。左边巨幅封面，右边刊名和续读。其余书压成栏底目录。" },
+  { id: "xian", n: "04", name: "线", blurb: "只有线和字。书库是一张表，阅读是最大边距的正文。瑞士网格，零装饰。" },
+  { id: "lang", n: "05", name: "廊", blurb: "一条展廊。封面等高横滑，选中的加宽。阅读从底部升起一张纸。" },
+  { id: "mu", n: "06", name: "目", blurb: "半页竖排书目，半页封面与题解。像线装书的目录页，点名即开。" },
+  { id: "cang", n: "07", name: "舱", blurb: "打开即读。上一本占满夜空，其余缩成舱底胶片。图书馆让位给正在读的那页。" },
+  { id: "jia", n: "08", name: "架", blurb: "真实书架：一排排书脊。点脊看书心。阅读是架下书案上的对开本。" },
+  { id: "ma", n: "09", name: "間", blurb: "留白当结构。一本占一行，封面小、书名极大。日式間，慢翻。" },
+  { id: "tie", n: "10", name: "帖", blurb: "一叠信札。最上面是正在读的展开页，下面露出前几本的纸边。朱印为记。" },
+];
+
+const B = [
+  { t: "人间词话", a: "王国维", h: 28, s: "28%", l: "28%" },
+  { t: "庄子", a: "庄周", h: 152, s: "22%", l: "28%" },
+  { t: "乡土中国", a: "费孝通", h: 12, s: "32%", l: "30%" },
+  { t: "美的历程", a: "李泽厚", h: 220, s: "24%", l: "30%" },
+  { t: "万历十五年", a: "黄仁宇", h: 210, s: "18%", l: "26%" },
+  { t: "日知录", a: "顾炎武", h: 36, s: "26%", l: "32%" },
+  { t: "红楼梦", a: "曹雪芹", h: 8, s: "38%", l: "28%" },
+  { t: "中国哲学简史", a: "冯友兰", h: 140, s: "20%", l: "26%" },
+  { t: "文心雕龙", a: "刘勰", h: 40, s: "22%", l: "24%" },
+  { t: "世说新语", a: "刘义庆", h: 80, s: "18%", l: "30%" },
+];
+const P = "昨夜西风凋碧树。独上高楼，望尽天涯路。衣带渐宽终不悔，为伊消得人憔悴。众里寻他千百度，蓦然回首，那人却在，灯火阑珊处。";
+
+function bk(b, extra = "") {
+  return `<div class="bk ${extra}" style="--h:${b.h};--s:${b.s};--l:${b.l}"><em>${b.t}</em><small>${b.a}</small></div>`;
+}
+
+function inner(id, view) {
+  if (id === "juan") return view === "lib" ? `
+    <div class="scroll">
+      <div class="rod"></div>
+      <div class="silk">${B.slice(0,6).map((b) => `<div class="slip"><b>${b.t}</b><i>${b.a}</i></div>`).join("")}</div>
+      <div class="rod"></div>
+    </div>` : `<div class="reader">${P}${P}</div>`;
+
+  if (id === "an") return view === "lib" ? `
+    <div class="desk">
+      <div class="list">${B.map((b,i) => `<div class="${i===0?"on":""}">${b.t}</div>`).join("")}</div>
+      <div class="stage2">
+        <div class="meta">案上 · 正在读</div>
+        <div class="open"><div>${P}</div><div>${P}</div></div>
+      </div>
+    </div>` : `<div class="desk"><div class="stage2" style="grid-column:1/-1"><div class="open"><div>${P}${P}</div><div>${P}</div></div></div></div>`;
+
+  if (id === "kan") return view === "lib" ? `
+    <div class="hero">
+      <div class="hero-cover">${bk(B[0])}</div>
+      <div class="copy">
+        <div class="kicker">Continue</div>
+        <h3>人间词话</h3>
+        <div class="by">王国维 · 读至 42%</div>
+        <button class="go">接着读</button>
+        <div class="more">${B.slice(1,5).map((b) => `<div><span>${b.t}</span><span>${b.a}</span></div>`).join("")}</div>
+      </div>
+    </div>` : `<div class="reader"><div class="toc"><b>目录</b><div style="margin-top:12px">卷上</div><div>卷下</div><div>附录</div></div><div class="article">${P}${P}</div></div>`;
+
+  if (id === "xian") return view === "lib" ? `
+    <div class="idx"><b>Hiread</b>${["全部","在读","收藏","笔记"].map((x,i)=>`<div class="${i===0?"on":""}">${x}</div>`).join("")}</div>
+    <div class="table">
+      <div class="th"><span>书名</span><span>作者</span><span>进度</span><span>格式</span></div>
+      ${B.map((b,i)=>`<div class="tr"><span>${b.t}</span><span>${b.a}</span><span>${[72,18,44,9,61,0,33,88,12,40][i]}%</span><span>EPUB</span></div>`).join("")}
+    </div>` : `<div class="reader">${P}${P}</div>`;
+
+  if (id === "lang") return view === "lib" ? `
+    <div class="film">${B.map((b,i)=>bk(b, i===2?"on":"")).join("")}</div>` : `
+    <div class="reader"><div class="sheet">${P}${P}</div></div>`;
+
+  if (id === "mu") return view === "lib" ? `
+    <div class="mulu">${B.map((b,i)=>`<span class="${i===0?"on":""}">${b.t}</span>`).join("")}</div>
+    <div class="sel">${bk(B[0])}<p>境界说三层。昨夜西风，衣带渐宽，灯火阑珊。</p></div>` : `<div class="reader">${P}${P}</div>`;
+
+  if (id === "cang") return view === "lib" ? `
+    <div class="now">${bk(B[0])}<h3>人间词话</h3><s>昨夜读至「境界」 · 第 42 页</s></div>
+    <div class="dock">${B.slice(1).map((b)=>bk(b)).join("")}</div>` : `
+    <div class="reader">${P}${P}</div><div class="dock2">${B.map((b)=>bk(b)).join("")}</div>`;
+
+  if (id === "jia") {
+    const row = (a,b) => `<div class="row">${B.slice(a,b).map((x,i)=>`<div class="spine ${i%3===0?"w":""}" style="--h:${x.h}">${x.t}</div>`).join("")}${B.slice(0,4).map((x)=>`<div class="spine" style="--h:${x.h+20}">${x.a}</div>`).join("")}</div>`;
+    return view === "lib" ? `${row(0,6)}${row(4,10)}${row(2,8)}` : `<div class="reader"><div class="spread"><div>${P}</div><div>${P}</div></div></div>`;
+  }
+
+  if (id === "ma") return view === "lib" ? B.slice(0,3).map((b)=>`
+    <div class="row2">${bk(b)}<div><h3>${b.t}</h3><p>${b.a}</p></div></div>`).join("") : `<div class="reader">${P}${P}</div>`;
+
+  return view === "lib" ? `
+    <div class="spread2">
+      <div class="pg"></div>
+      <div class="pg"></div>
+      <div class="pg">${bk(B[0])}<div><div style="letter-spacing:.2em;font-size:12px;opacity:.5">正在读</div><h3 style="font-family:'Noto Serif SC',serif;font-size:32px;margin:8px 0 10px">${B[0].t}</h3><p style="line-height:1.7;margin:0;color:#5a4a38">${P}</p><div class="seal">閱</div></div></div>
+    </div>` : `<div class="reader"><div>${P}${P}</div><div>${P}</div></div>`;
+}
+
+const q = new URLSearchParams(location.search);
+let scheme = S.some((s) => s.id === q.get("s")) ? q.get("s") : "juan";
+let view = q.get("v") === "read" ? "read" : "lib";
+
+const nav = document.getElementById("nav");
+nav.innerHTML = S.map((s) => `<button type="button" data-s="${s.id}" aria-pressed="${s.id===scheme}"><span class="n">${s.n}</span><span>${s.name}<small>${s.blurb.slice(0,18)}…</small></span></button>`).join("");
+
+function paint() {
+  const s = S.find((x) => x.id === scheme);
+  document.getElementById("title").textContent = s.n + "  " + s.name;
+  document.getElementById("blurb").textContent = s.blurb;
+  document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === scheme)));
+  document.querySelectorAll(".toggle button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === view)));
+  document.getElementById("frame").innerHTML = `
+    <div class="win ${scheme}">
+      <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="wt">Hiread — ${s.name}</span></div>
+      <div class="app">${inner(scheme, view)}</div>
+    </div>`;
+}
+nav.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  scheme = b.dataset.s;
+  paint();
+});
+document.querySelector(".toggle").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  view = b.dataset.v;
+  paint();
+});
+paint();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+.task
+bin
+# The app binary is a build artifact (task build writes bin/); it was tracked in
+# the repo hiread was forked from, which put a 25 MB blob in every commit.
+/hiread
+# goenv writes this on every toolchain invocation.
+.go-version
+frontend/dist
+frontend/node_modules
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+# Mobile generated (per-machine; overlays hold absolute paths)
+build/ios/xcode/overlay.json
+build/ios/xcode/gen/
+build/android/overlay.json
+build/android/gen/
+# Editor / IDE
+.idea/
+
+# Superpowers scratch (brainstorm sessions, sdd ledger, plans)
+.superpowers/
+
+# Claude Code local state (worktrees, local settings)
+.claude/
+# Superpowers docs (plans/specs scratch — local only)
+docs/superpowers/
+
+# Local caches / tooling
+node_modules/
+.reasonix/

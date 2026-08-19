@@ -1,0 +1,36 @@
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundlePackageType</key>
+            <string>APPL</string>
+        <key>CFBundleName</key>
+            <string>Hiread</string>
+        <key>CFBundleExecutable</key>
+            <string>hiread</string>
+        <key>CFBundleIdentifier</key>
+            <string>ai.hiread.reader</string>
+        <key>CFBundleVersion</key>
+            <string>0.1.2</string>
+        <key>CFBundleGetInfoString</key>
+            <string>This is a comment</string>
+        <key>CFBundleShortVersionString</key>
+            <string>0.1.2</string>
+        <key>CFBundleIconFile</key>
+            <string>icons</string>
+        <key>LSMinimumSystemVersion</key>
+            <string>12.0.0</string>
+        <key>NSHighResolutionCapable</key>
+            <string>true</string>
+        <key>NSHumanReadableCopyright</key>
+            <string>© 2026, My Company</string>
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <!-- Match production: let the original-page view load plain-http
+                 article pages/images in WKWebView content. -->
+            <key>NSAllowsArbitraryLoadsInWebContent</key>
+            <true/>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
+    </dict>
+</plist>

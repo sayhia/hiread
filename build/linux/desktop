@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Hiread
+Comment=A hiread application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/hiread %u
+Terminal=false
+Type=Application
+Icon=hiread
+Categories=Utility;
+StartupWMClass=hiread
+
+ 

@@ -1,0 +1,38 @@
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>CFBundlePackageType</key>
+            <string>APPL</string>
+        <key>CFBundleName</key>
+            <string>Hiread</string>
+        <key>CFBundleExecutable</key>
+            <string>hiread</string>
+        <key>CFBundleIdentifier</key>
+            <string>ai.hiread.reader</string>
+        <key>CFBundleVersion</key>
+            <string>0.1.2</string>
+        <key>CFBundleGetInfoString</key>
+            <string>This is a comment</string>
+        <key>CFBundleShortVersionString</key>
+            <string>0.1.2</string>
+        <key>CFBundleIconFile</key>
+            <string>icons</string>
+        <key>LSMinimumSystemVersion</key>
+            <string>12.0.0</string>
+        <key>NSHighResolutionCapable</key>
+            <string>true</string>
+        <key>NSHumanReadableCopyright</key>
+            <string>© 2026, My Company</string>
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <!-- The reader's original-page view (and inline article images) loads
+                 arbitrary external sites, many still plain http. Relax ATS for
+                 WKWebView content only; the Go backend's own fetches use net/http
+                 and are not subject to ATS. -->
+            <key>NSAllowsArbitraryLoadsInWebContent</key>
+            <true/>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
+    </dict>
+</plist>

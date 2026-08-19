@@ -1,0 +1,93 @@
+name: Release
+
+# Tag a release (e.g. `git tag v0.1.0 && git push --tags`) to build native
+# packages on each OS and attach them to a DRAFT GitHub release for review
+# before publishing. macOS bundles are ad-hoc signed only (no Developer ID /
+# notarization) — Gatekeeper will warn until that is wired up with secrets.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon
+            label: darwin-arm64
+          - os: macos-13 # Intel
+            label: darwin-amd64
+          - os: ubuntu-latest
+            label: linux-amd64
+          - os: windows-latest
+            label: windows-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies (GTK4 + WebKitGTK 6.0)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      # Wails' Windows cgo build needs a C toolchain (not present by default).
+      - name: Install MinGW (Windows cgo)
+        if: runner.os == 'Windows'
+        run: choco install mingw -y
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails3 CLI and Task
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.103
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # macOS: produce the signed .app bundle. Linux/Windows: just the binary
+      # (the full installer tasks — appimage/deb/rpm, nsis — need extra tooling
+      # and are intentionally skipped here).
+      - name: Package (macOS .app)
+        if: runner.os == 'macOS'
+        run: task package
+
+      - name: Build (Linux / Windows binary)
+        if: runner.os != 'macOS'
+        run: task build
+
+      - name: Archive artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          case "${{ runner.os }}" in
+            macOS)   ditto -c -k --keepParent bin/hiread.app "dist/hiread-${{ matrix.label }}.zip" ;;
+            Linux)   tar -czf "dist/hiread-${{ matrix.label }}.tar.gz" -C bin hiread ;;
+            Windows) 7z a "dist/hiread-${{ matrix.label }}.zip" ./bin/hiread.exe ;;
+          esac
+
+      - name: Upload to draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: Hiread ${{ github.ref_name }}
+          body: "Download the asset for your platform below. macOS builds are ad-hoc signed; right-click → Open on first launch."
+          files: dist/*
