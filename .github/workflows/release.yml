@@ -16,7 +16,9 @@ on:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  # A retry must kill a stuck prior run. Default job timeout is 6h; one hung
+  # ubuntu-latest GTK apt was enough to empty the monthly private-repo quota.
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -29,6 +31,7 @@ jobs:
   meta:
     name: Resolve version
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
@@ -87,7 +90,7 @@ jobs:
             label: windows-amd64
             kind: windows
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
@@ -349,6 +352,7 @@ jobs:
     name: Build hiread-cli
     needs: meta
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
@@ -399,6 +403,7 @@ jobs:
     needs: [meta, package, cli]
     if: ${{ always() && needs.meta.result == 'success' && needs.cli.result == 'success' && needs.package.result != 'cancelled' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4

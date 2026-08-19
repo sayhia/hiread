@@ -11,6 +11,10 @@ on:
         default: "v0.1.0"
         type: string
 
+concurrency:
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -31,7 +35,7 @@ jobs:
             mac_name: Intel
             lipo_arch: x86_64
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -136,6 +140,7 @@ jobs:
     name: Attach to GitHub Release
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
