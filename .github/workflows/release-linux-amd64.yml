@@ -1,0 +1,175 @@
+name: Release Linux amd64
+
+# Rebuild only the Linux x64 desktop packages and attach them to an existing
+# GitHub Release (used to fill in a failed matrix cell without rebuilding
+# macOS/Windows/ARM).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to upload to"
+        required: true
+        default: "v0.1.0"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  WAILS3_VERSION: v3.0.0-alpha2.103
+  APPIMAGE_EXTRACT_AND_RUN: "1"
+
+jobs:
+  package:
+    name: Package linux-amd64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      HIREAD_VERSION: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve version
+        id: v
+        run: |
+          TAG="${{ inputs.tag }}"
+          [[ "${TAG}" == v* ]] || TAG="v${TAG}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+          echo "HIREAD_VERSION=${TAG#v}" >> "${GITHUB_ENV}"
+
+      - name: Stamp version into packaging metadata
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+          version = os.environ["VERSION"]
+
+          def sub(path: str, pattern: str, repl: str, count: int = 0) -> None:
+              p = pathlib.Path(path)
+              text = p.read_text(encoding="utf-8")
+              new, n = re.subn(pattern, repl, text, count=count, flags=re.M)
+              if n == 0:
+                  sys.exit(f"no match in {path}: {pattern}")
+              p.write_text(new, encoding="utf-8")
+
+          sub("services/update.go", r'var appVersion = "[^"]+"', f'var appVersion = "{version}"')
+          sub("build/linux/nfpm/nfpm.yaml", r'^version:\s*".*"', f'version: "{version}"', count=1)
+          print(f"stamped {version}")
+          PY
+
+      - name: Stub embedded frontend assets
+        run: |
+          mkdir -p frontend/dist
+          echo '<!doctype html><title>release stub</title>' > frontend/dist/index.html
+
+      - name: Install Linux system dependencies
+        run: |
+          set -euxo pipefail
+          echo 'man-db man-db/auto-update boolean false' | sudo debconf-set-selections || true
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo mkdir -p /etc/needrestart/conf.d
+          echo '$nrconf{restart} = "a";' | sudo tee /etc/needrestart/conf.d/ci.conf >/dev/null || true
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get \
+            -o Acquire::ForceIPv4=true \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Timeout=30 \
+            -o Dpkg::Use-Pty=0 \
+            update
+          sudo apt-get \
+            -o Acquire::ForceIPv4=true \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Timeout=30 \
+            -o Dpkg::Use-Pty=0 \
+            -o Dpkg::Options::=--force-confdef \
+            -o Dpkg::Options::=--force-confold \
+            install -y --no-install-recommends \
+              libgtk-4-dev \
+              libwebkitgtk-6.0-dev \
+              libfuse2 \
+              rpm \
+              ca-certificates \
+              wget
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails3 CLI and Task
+        run: |
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
+
+      - name: Build Linux binary and installers
+        run: |
+          set -euo pipefail
+          export GOARCH
+          GOARCH="$(go env GOARCH)"
+          task build VERSION="${HIREAD_VERSION}"
+          task linux:generate:dotdesktop
+          task linux:generate:deb
+          task linux:generate:rpm
+          task linux:generate:aur || true
+
+      - name: Build Linux AppImage
+        continue-on-error: true
+        run: task linux:create:appimage
+
+      - name: Collect artifacts
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p dist
+          LABEL=linux-amd64
+          for f in bin/*.AppImage; do
+            cp "$f" "dist/Hiread-${VERSION}-${LABEL}.AppImage"
+            chmod +x "dist/Hiread-${VERSION}-${LABEL}.AppImage"
+          done
+          for f in bin/*.deb; do
+            cp "$f" "dist/Hiread-${VERSION}-${LABEL}.deb"
+          done
+          for f in bin/*.rpm; do
+            cp "$f" "dist/Hiread-${VERSION}-${LABEL}.rpm"
+          done
+          for f in bin/*.pkg.tar.zst bin/*.pkg.tar.xz; do
+            ext="${f##*.}"
+            cp "$f" "dist/Hiread-${VERSION}-${LABEL}.pkg.tar.${ext}"
+          done
+          if [[ ! -f bin/hiread ]]; then
+            echo "missing bin/hiread" >&2
+            exit 1
+          fi
+          tar -czf "dist/Hiread-${VERSION}-${LABEL}.tar.gz" -C bin hiread
+          ls -lh dist
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "${TAG}" dist/* --clobber
+          tmp=$(mktemp)
+          gh release download "${TAG}" --pattern SHA256SUMS.txt --output "${tmp}" || true
+          {
+            if [[ -s "${tmp}" ]]; then
+              grep -v 'Hiread-.*-linux-amd64' "${tmp}" || true
+            fi
+            (cd dist && sha256sum *)
+          } | sort -k2 > SHA256SUMS.txt
+          gh release upload "${TAG}" SHA256SUMS.txt --clobber
+          gh release view "${TAG}"
