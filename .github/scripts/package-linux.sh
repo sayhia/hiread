@@ -22,6 +22,23 @@ sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty
     rpm wget python3 file
 
 sudo dpkg --add-architecture amd64
+# ports.ubuntu.com has no amd64 indexes. Pin existing ARM sources to arm64
+# and add archive.ubuntu.com for the x64 GTK/WebKit sysroot.
+if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then
+  if ! grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources; then
+    sudo sed -i 's/^Types:/Architectures: arm64\nTypes:/' /etc/apt/sources.list.d/ubuntu.sources
+  fi
+fi
+for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list; do
+  [[ -f "$f" ]] || continue
+  sudo sed -i -E 's|^(deb(-src)? )http://ports\.ubuntu\.com|\1[arch=arm64] http://ports.ubuntu.com|; s|^(deb(-src)? )https://ports\.ubuntu\.com|\1[arch=arm64] https://ports.ubuntu.com|' "$f"
+done
+sudo tee /etc/apt/sources.list.d/amd64.list >/dev/null <<'EOF'
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble-backports main restricted universe multiverse
+deb [arch=amd64] http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse
+EOF
 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 update
 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 \
   install -y --no-install-recommends \
