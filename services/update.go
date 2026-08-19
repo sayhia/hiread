@@ -21,9 +21,9 @@ import (
 	"hiread/internal/apperr"
 )
 
-// appVersion is the single source of truth for the app's version. Keep in
-// sync with build/darwin/Info.plist CFBundleShortVersionString.
-const appVersion = "0.1.0"
+// appVersion is the running build's version. The release workflow overwrites
+// this string before compiling; keep the default in sync with Info.plist.
+var appVersion = "0.1.0"
 
 // releaseAPI is the GitHub "latest release" endpoint for the app repository.
 const releaseAPI = "https://api.github.com/repos/sunmking/hiread/releases/latest"

@@ -1,46 +1,149 @@
 name: Release
 
-# Tag a release (e.g. `git tag v0.1.0 && git push --tags`) to build native
-# packages on each OS and attach them to a DRAFT GitHub release for review
-# before publishing. macOS bundles are ad-hoc signed only (no Developer ID /
-# notarization) — Gatekeeper will warn until that is wired up with secrets.
+# Push a version tag (`git tag v0.1.0 && git push origin v0.1.0`) to build
+# native installers on each OS and attach them to a GitHub Release.
+# macOS bundles are ad-hoc signed only (no Developer ID / notarization) —
+# Gatekeeper will warn until that is wired up with secrets.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0). Empty = prerelease from this SHA."
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
+env:
+  WAILS3_VERSION: v3.0.0-alpha2.103
+  APPIMAGE_EXTRACT_AND_RUN: "1"
+
 jobs:
-  release:
+  meta:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v0.0.0-dev.${GITHUB_SHA::7}"
+          fi
+          if [[ "${TAG}" != v* ]]; then
+            TAG="v${TAG}"
+          fi
+          VERSION="${TAG#v}"
+          PRE=false
+          if [[ "${VERSION}" == *-* ]]; then
+            PRE=true
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRE}" >> "${GITHUB_OUTPUT}"
+          echo "Release ${TAG} (version ${VERSION}, prerelease=${PRE})"
+
+  package:
     name: Package ${{ matrix.label }}
+    needs: meta
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14 # Apple Silicon
-            label: darwin-arm64
-          - os: macos-13 # Intel
-            label: darwin-amd64
-          - os: ubuntu-latest
+          - os: macos-latest
+            label: darwin-universal
+            kind: macos
+          - os: ubuntu-24.04
             label: linux-amd64
+            kind: linux
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+            kind: linux
           - os: windows-latest
             label: windows-amd64
+            kind: windows
     runs-on: ${{ matrix.os }}
+    env:
+      HIREAD_VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies (GTK4 + WebKitGTK 6.0)
+      - name: Stamp version into packaging metadata
+        shell: bash
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+
+          version = os.environ["VERSION"]
+
+          def sub(path: str, pattern: str, repl: str, count: int = 0) -> None:
+              p = pathlib.Path(path)
+              text = p.read_text(encoding="utf-8")
+              new, n = re.subn(pattern, repl, text, count=count)
+              if n == 0:
+                  sys.exit(f"no match in {path}: {pattern}")
+              p.write_text(new, encoding="utf-8")
+
+          sub("services/update.go", r'var appVersion = "[^"]+"', f'var appVersion = "{version}"')
+          sub(
+              "build/darwin/Info.plist",
+              r"(<key>CFBundleVersion</key>\s*<string>)[^<]+",
+              rf"\g<1>{version}",
+          )
+          sub(
+              "build/darwin/Info.plist",
+              r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]+",
+              rf"\g<1>{version}",
+          )
+          sub("build/windows/info.json", r'"file_version": "[^"]+"', f'"file_version": "{version}"')
+          sub("build/windows/info.json", r'"ProductVersion": "[^"]+"', f'"ProductVersion": "{version}"')
+          sub("build/linux/nfpm/nfpm.yaml", r'^version:\s*".*"', f'version: "{version}"', count=1)
+          print(f"stamped {version}")
+          PY
+
+      # main.go embeds frontend/dist (gitignored). Bindings generation compiles
+      # the Go package before Vite has written the real dist.
+      - name: Stub embedded frontend assets
+        shell: bash
+        run: |
+          mkdir -p frontend/dist
+          echo '<!doctype html><title>release stub</title>' > frontend/dist/index.html
+
+      - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libwebkitgtk-6.0-dev \
+            libfuse2 \
+            rpm
 
-      # Wails' Windows cgo build needs a C toolchain (not present by default).
-      - name: Install MinGW (Windows cgo)
+      - name: Install NSIS (Windows installer)
         if: runner.os == 'Windows'
-        run: choco install mingw -y
+        run: choco install nsis -y --no-progress
+
+      - name: Add NSIS to PATH
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "/c/Program Files (x86)/NSIS" >> "${GITHUB_PATH}"
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -58,36 +161,212 @@ jobs:
       - name: Install Wails3 CLI and Task
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.103
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
           go install github.com/go-task/task/v3/cmd/task@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
 
-      # macOS: produce the signed .app bundle. Linux/Windows: just the binary
-      # (the full installer tasks — appimage/deb/rpm, nsis — need extra tooling
-      # and are intentionally skipped here).
-      - name: Package (macOS .app)
-        if: runner.os == 'macOS'
-        run: task package
+      - name: Package macOS universal app
+        if: matrix.kind == 'macos'
+        run: task darwin:package:universal VERSION="${HIREAD_VERSION}"
 
-      - name: Build (Linux / Windows binary)
-        if: runner.os != 'macOS'
-        run: task build
+      - name: Build Linux binary and installers
+        if: matrix.kind == 'linux'
+        run: |
+          set -euo pipefail
+          export GOARCH
+          GOARCH="$(go env GOARCH)"
+          task build VERSION="${HIREAD_VERSION}"
+          task linux:generate:dotdesktop
+          task linux:generate:deb
+          task linux:generate:rpm
+          task linux:generate:aur || true
 
-      - name: Archive artifact
+      - name: Build Linux AppImage
+        if: matrix.kind == 'linux'
+        continue-on-error: true
+        run: task linux:create:appimage
+
+      - name: Build Windows installer
+        if: matrix.kind == 'windows'
+        run: task package VERSION="${HIREAD_VERSION}" INSTALL_SCOPE=user
+
+      - name: Collect artifacts
+        shell: bash
+        env:
+          LABEL: ${{ matrix.label }}
+          KIND: ${{ matrix.kind }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p dist
+          case "${KIND}" in
+            macos)
+              if [[ ! -d bin/hiread.app ]]; then
+                echo "missing bin/hiread.app" >&2
+                exit 1
+              fi
+              ditto -c -k --keepParent bin/hiread.app "dist/Hiread-${VERSION}-macOS.zip"
+              mkdir -p dmgroot
+              ditto bin/hiread.app dmgroot/Hiread.app
+              ln -s /Applications dmgroot/Applications
+              hdiutil create \
+                -volname "Hiread" \
+                -srcfolder dmgroot \
+                -ov -format UDZO \
+                "dist/Hiread-${VERSION}-macOS.dmg"
+              ;;
+            linux)
+              found=0
+              for f in bin/*.AppImage; do
+                cp "$f" "dist/Hiread-${VERSION}-${LABEL}.AppImage"
+                chmod +x "dist/Hiread-${VERSION}-${LABEL}.AppImage"
+                found=1
+              done
+              for f in bin/*.deb; do
+                cp "$f" "dist/Hiread-${VERSION}-${LABEL}.deb"
+                found=1
+              done
+              for f in bin/*.rpm; do
+                cp "$f" "dist/Hiread-${VERSION}-${LABEL}.rpm"
+                found=1
+              done
+              for f in bin/*.pkg.tar.zst bin/*.pkg.tar.xz; do
+                ext="${f##*.}"
+                cp "$f" "dist/Hiread-${VERSION}-${LABEL}.pkg.tar.${ext}"
+                found=1
+              done
+              if [[ ! -f bin/hiread ]]; then
+                echo "missing bin/hiread" >&2
+                exit 1
+              fi
+              tar -czf "dist/Hiread-${VERSION}-${LABEL}.tar.gz" -C bin hiread
+              found=1
+              if [[ "${found}" -eq 0 ]]; then
+                echo "no linux artifacts collected" >&2
+                exit 1
+              fi
+              ;;
+            windows)
+              installer=""
+              for f in bin/*-installer.exe bin/*installer.exe; do
+                installer="$f"
+                break
+              done
+              if [[ -z "${installer}" ]]; then
+                echo "missing NSIS installer under bin/" >&2
+                ls -la bin || true
+                exit 1
+              fi
+              cp "${installer}" "dist/Hiread-${VERSION}-${LABEL}-setup.exe"
+              if [[ ! -f bin/hiread.exe ]]; then
+                echo "missing bin/hiread.exe" >&2
+                exit 1
+              fi
+              7z a "dist/Hiread-${VERSION}-${LABEL}.zip" ./bin/hiread.exe
+              ;;
+            *)
+              echo "unknown kind ${KIND}" >&2
+              exit 1
+              ;;
+          esac
+          ls -lh dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiread-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+
+  cli:
+    name: Build hiread-cli
+    needs: meta
+    runs-on: ubuntu-latest
+    env:
+      HIREAD_VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cross-compile CLI
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          case "${{ runner.os }}" in
-            macOS)   ditto -c -k --keepParent bin/hiread.app "dist/hiread-${{ matrix.label }}.zip" ;;
-            Linux)   tar -czf "dist/hiread-${{ matrix.label }}.tar.gz" -C bin hiread ;;
-            Windows) 7z a "dist/hiread-${{ matrix.label }}.zip" ./bin/hiread.exe ;;
-          esac
+          targets=(
+            darwin/amd64
+            darwin/arm64
+            linux/amd64
+            linux/arm64
+            windows/amd64
+            windows/arm64
+          )
+          for spec in "${targets[@]}"; do
+            GOOS="${spec%/*}"
+            GOARCH="${spec#*/}"
+            out="dist/hiread-cli-${HIREAD_VERSION}-${GOOS}-${GOARCH}"
+            if [[ "${GOOS}" == windows ]]; then
+              out="${out}.exe"
+            fi
+            echo "building ${out}"
+            CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+              go build -trimpath -ldflags="-w -s" -o "${out}" ./cmd/hiread-cli
+          done
+          ls -lh dist
 
-      - name: Upload to draft release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hiread-cli
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [meta, package, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: artifacts
+        run: |
+          set -euo pipefail
+          sha256sum * | tee SHA256SUMS.txt
+          ls -lh
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          tag_name: ${{ github.ref_name }}
-          name: Hiread ${{ github.ref_name }}
-          body: "Download the asset for your platform below. macOS builds are ad-hoc signed; right-click → Open on first launch."
-          files: dist/*
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: Hiread ${{ needs.meta.outputs.tag }}
+          draft: false
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Prebuilt installers for Hiread ${{ needs.meta.outputs.version }}.
+
+            | Platform | Installer |
+            | --- | --- |
+            | macOS 12+ (Apple Silicon + Intel) | `Hiread-${{ needs.meta.outputs.version }}-macOS.dmg` |
+            | Windows 10+ (x64) | `Hiread-${{ needs.meta.outputs.version }}-windows-amd64-setup.exe` |
+            | Linux x64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+            | Linux ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+
+            The `hiread-cli-*` assets are the agent-facing CLI for the same local library.
+
+            **macOS:** ad-hoc signed. First launch: right-click the app → Open.
+            **Windows:** unsigned; SmartScreen may warn on first run.
+            **Linux:** `.deb` / `.rpm` need GTK4 + WebKitGTK 6.0 (Ubuntu 24.04+ / Fedora current).
+          files: artifacts/*

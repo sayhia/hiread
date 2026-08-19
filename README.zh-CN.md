@@ -11,7 +11,8 @@
   <img src="https://img.shields.io/badge/Wails-v3%20alpha-d33?logo=wails&logoColor=white" alt="Wails v3" />
   <img src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3" />
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5" />
-  <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-555?logo=apple" alt="macOS / Linux" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555" alt="macOS / Windows / Linux" />
+  <a href="https://github.com/sunmking/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sunmking/hiread" alt="GitHub release" /></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
@@ -135,6 +136,20 @@ hiread/
 └── build/             # Wails 配置、图标、各平台 Taskfile
 ```
 
+## 下载
+
+安装包在每次 [GitHub Release](https://github.com/sunmking/hiread/releases/latest) 中提供。
+
+| 平台 | 文件 |
+| --- | --- |
+| macOS 12+（Apple Silicon + Intel） | `Hiread-*-macOS.dmg` |
+| Windows 10+（x64） | `Hiread-*-windows-amd64-setup.exe` |
+| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+
+macOS 为 ad-hoc 签名。第一次打开：右键应用 → 打开。Windows 未签名，SmartScreen 可能会提示。
+
+发布新版本：`git tag v0.1.1 && git push origin v0.1.1`。GitHub Actions 会构建各平台安装包并发布 Release。
+
 ## 开始使用
 
 ### 前置条件
@@ -167,6 +182,7 @@ task build:cli  # 构建 agent 命令行      → bin/hiread-cli
 
 ```
 ~/Library/Application Support/Hiread/hiread.db   # macOS
+%APPDATA%\Hiread\hiread.db                       # Windows
 ~/.config/Hiread/hiread.db                       # Linux
 ```
 

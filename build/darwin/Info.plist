@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>ai.hiread.reader</string>
         <key>CFBundleVersion</key>
-            <string>0.1.2</string>
+            <string>0.1.0</string>
         <key>CFBundleGetInfoString</key>
-            <string>This is a comment</string>
+            <string>Hiread</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.1.2</string>
+            <string>0.1.0</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
@@ -22,7 +22,7 @@
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
-            <string>© 2026, My Company</string>
+            <string>© 2026 sunmking</string>
         <key>NSAppTransportSecurity</key>
         <dict>
             <!-- The reader's original-page view (and inline article images) loads

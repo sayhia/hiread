@@ -11,7 +11,8 @@
   <img src="https://img.shields.io/badge/Wails-v3%20alpha-d33?logo=wails&logoColor=white" alt="Wails v3" />
   <img src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3" />
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5" />
-  <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-555?logo=apple" alt="macOS / Linux" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555" alt="macOS / Windows / Linux" />
+  <a href="https://github.com/sunmking/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sunmking/hiread" alt="GitHub release" /></a>
 </p>
 
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -148,6 +149,20 @@ hiread/
 └── build/             # Wails config, icons, per-platform Taskfiles
 ```
 
+## Download
+
+Installers are attached to every [GitHub Release](https://github.com/sunmking/hiread/releases/latest).
+
+| Platform | File |
+| --- | --- |
+| macOS 12+ (Apple Silicon + Intel) | `Hiread-*-macOS.dmg` |
+| Windows 10+ (x64) | `Hiread-*-windows-amd64-setup.exe` |
+| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+
+macOS builds are ad-hoc signed. First launch: right-click the app → Open. Windows is unsigned; SmartScreen may warn.
+
+To cut a release: `git tag v0.1.1 && git push origin v0.1.1`. GitHub Actions builds the packages and publishes the release.
+
 ## Getting started
 
 ### Prerequisites
@@ -181,6 +196,7 @@ Your library lives in a single SQLite file:
 
 ```
 ~/Library/Application Support/Hiread/hiread.db   # macOS
+%APPDATA%\Hiread\hiread.db                       # Windows
 ~/.config/Hiread/hiread.db                       # Linux
 ```
 
