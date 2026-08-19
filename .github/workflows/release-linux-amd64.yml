@@ -1,8 +1,8 @@
 name: Release Linux amd64
 
 # Rebuild only the Linux x64 desktop packages and attach them to an existing
-# GitHub Release. Runs on ARM (whose apt works) and builds amd64 in Docker
-# because ubuntu-24.04 x64 runners hang installing GTK/WebKit headers.
+# GitHub Release. Cross-compiles on ubuntu-24.04-arm because native x64
+# runners hang installing GTK/WebKit headers, and qemu cannot run Go.
 on:
   workflow_dispatch:
     inputs:
@@ -21,9 +21,9 @@ env:
 
 jobs:
   package:
-    name: Package linux-amd64 (docker)
+    name: Cross-compile linux-amd64
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -35,23 +35,25 @@ jobs:
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build packages in linux/amd64 container
+      - name: Cross-compile and package
         env:
           HIREAD_VERSION: ${{ steps.v.outputs.version }}
         run: |
           chmod +x .github/scripts/package-linux.sh
-          docker run --rm --platform linux/amd64 \
-            -v "${PWD}:/src" -w /src \
-            -e HIREAD_VERSION \
-            -e WAILS3_VERSION \
-            -e APPIMAGE_EXTRACT_AND_RUN \
-            ubuntu:24.04 bash /src/.github/scripts/package-linux.sh
+          .github/scripts/package-linux.sh
 
       - name: Upload to GitHub Release
         env:

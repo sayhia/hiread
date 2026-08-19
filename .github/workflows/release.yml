@@ -68,11 +68,11 @@ jobs:
           - os: macos-latest
             label: darwin-universal
             kind: macos
-          # ubuntu-24.04 x64 hangs installing GTK/WebKit -dev. Build amd64
-          # packages in a qemu container on the ARM runner instead.
+          # ubuntu-24.04 x64 hangs installing GTK/WebKit -dev. Cross-compile
+          # amd64 on the ARM runner (native Go + amd64 GTK sysroot).
           - os: ubuntu-24.04-arm
             label: linux-amd64
-            kind: linux-amd64-docker
+            kind: linux-amd64-cross
           - os: ubuntu-24.04-arm
             label: linux-arm64
             kind: linux
@@ -128,25 +128,6 @@ jobs:
         run: |
           mkdir -p frontend/dist
           echo '<!doctype html><title>release stub</title>' > frontend/dist/index.html
-
-      - name: Set up QEMU (linux/amd64 container)
-        if: matrix.kind == 'linux-amd64-docker'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        if: matrix.kind == 'linux-amd64-docker'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build linux-amd64 packages in Docker
-        if: matrix.kind == 'linux-amd64-docker'
-        run: |
-          chmod +x .github/scripts/package-linux.sh
-          docker run --rm --platform linux/amd64 \
-            -v "${PWD}:/src" -w /src \
-            -e HIREAD_VERSION \
-            -e WAILS3_VERSION \
-            -e APPIMAGE_EXTRACT_AND_RUN \
-            ubuntu:24.04 bash /src/.github/scripts/package-linux.sh
 
       - name: Install Linux system dependencies
         if: matrix.kind == 'linux'
@@ -204,14 +185,12 @@ jobs:
           }
 
       - name: Setup Go
-        if: matrix.kind != 'linux-amd64-docker'
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Setup Node
-        if: matrix.kind != 'linux-amd64-docker'
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -219,12 +198,18 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails3 CLI and Task
-        if: matrix.kind != 'linux-amd64-docker'
+        if: matrix.kind != 'linux-amd64-cross'
         shell: bash
         run: |
           go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
           go install github.com/go-task/task/v3/cmd/task@latest
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
+
+      - name: Cross-compile linux-amd64 packages
+        if: matrix.kind == 'linux-amd64-cross'
+        run: |
+          chmod +x .github/scripts/package-linux.sh
+          .github/scripts/package-linux.sh
 
       - name: Package macOS universal app
         if: matrix.kind == 'macos'
@@ -259,7 +244,7 @@ jobs:
           task windows:create:nsis:installer INSTALL_SCOPE=user
 
       - name: Collect artifacts
-        if: matrix.kind != 'linux-amd64-docker'
+        if: matrix.kind != 'linux-amd64-cross'
         shell: bash
         env:
           LABEL: ${{ matrix.label }}
