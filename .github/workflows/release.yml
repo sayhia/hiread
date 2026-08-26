@@ -13,6 +13,10 @@ on:
         description: "Release tag (e.g. v0.1.0). Empty = prerelease from this SHA."
         required: false
         type: string
+      platforms:
+        description: "Comma-separated package labels to build (e.g. linux-amd64). Empty = all."
+        required: false
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
@@ -64,6 +68,9 @@ jobs:
   package:
     name: Package ${{ matrix.label }}
     needs: meta
+    # Rebuilding a single platform (workflow_dispatch inputs.platforms) must not
+    # re-run the whole matrix — each skipped job counts as success.
+    if: ${{ inputs.platforms == '' || contains(inputs.platforms, matrix.label) }}
     strategy:
       fail-fast: false
       matrix:
@@ -403,13 +410,38 @@ jobs:
     needs: [meta, package, cli]
     if: ${{ always() && needs.meta.result == 'success' && needs.cli.result == 'success' && needs.package.result != 'cancelled' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+
+      # A partial rebuild (inputs.platforms) only produces fresh copies of the
+      # rebuilt assets. Pull the already-published ones back in so SHA256SUMS.txt
+      # keeps covering the whole release; fresh builds win on a name clash.
+      - name: Merge existing release assets into the checksum set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "no existing release for ${TAG}; skipping merge"
+            exit 0
+          fi
+          mkdir -p previous
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir previous
+          shopt -s nullglob
+          for f in previous/*; do
+            base="$(basename "$f")"
+            if [[ ! -e "artifacts/${base}" ]]; then
+              mv "$f" "artifacts/${base}"
+            else
+              echo "keeping fresh build of ${base}"
+            fi
+          done
 
       - name: Checksums
         working-directory: artifacts
