@@ -75,9 +75,9 @@ jobs:
           set -euo pipefail
           cat > matrix.json <<'EOF'
           [
-            { "os": "macos-latest",     "label": "darwin-arm64",  "kind": "macos",             "arch": "arm64", "mac_name": "AppleSilicon" },
-            { "os": "macos-latest",     "label": "darwin-amd64",  "kind": "macos",             "arch": "amd64", "mac_name": "Intel" },
-            { "os": "ubuntu-24.04-arm", "label": "linux-amd64",   "kind": "linux-amd64-cross" },
+            { "os": "macos-latest",     "label": "darwin-arm64",  "kind": "macos",    "arch": "arm64", "mac_name": "AppleSilicon" },
+            { "os": "macos-latest",     "label": "darwin-amd64",  "kind": "macos",    "arch": "amd64", "mac_name": "Intel" },
+            { "os": "ubuntu-latest",    "label": "linux-amd64",   "kind": "linux" },
             { "os": "ubuntu-24.04-arm", "label": "linux-arm64",   "kind": "linux" },
             { "os": "windows-latest",   "label": "windows-amd64", "kind": "windows" }
           ]
@@ -220,18 +220,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails3 CLI and Task
-        if: matrix.kind != 'linux-amd64-cross'
         shell: bash
         run: |
           go install "github.com/wailsapp/wails/v3/cmd/wails3@${WAILS3_VERSION}"
           go install github.com/go-task/task/v3/cmd/task@latest
           echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
-
-      - name: Cross-compile linux-amd64 packages
-        if: matrix.kind == 'linux-amd64-cross'
-        run: |
-          chmod +x .github/scripts/package-linux.sh
-          .github/scripts/package-linux.sh
 
       - name: Package macOS app
         if: matrix.kind == 'macos'
@@ -269,7 +262,6 @@ jobs:
           task windows:create:nsis:installer INSTALL_SCOPE=user
 
       - name: Collect artifacts
-        if: matrix.kind != 'linux-amd64-cross'
         shell: bash
         env:
           LABEL: ${{ matrix.label }}
