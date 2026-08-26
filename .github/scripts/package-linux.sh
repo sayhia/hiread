@@ -37,10 +37,16 @@ deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble-backports main restricte
 deb [arch=amd64] http://security.ubuntu.com/ubuntu noble-security main restricted universe multiverse
 EOF
 sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 update
-sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0 \
-  install -y --no-install-recommends \
-    libgtk-4-dev:amd64 \
-    libwebkitgtk-6.0-dev:amd64
+# Pin to the self-consistent noble base pocket first: mixing arm64 ports with
+# amd64 archive has hit half-synced SRUs where the amd64 -dev pulls a bin-linux
+# split package that no longer resolves across pockets.
+GTK_PKGS=(libgtk-4-dev:amd64 libwebkitgtk-6.0-dev:amd64)
+APT_OPTS=(-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dpkg::Use-Pty=0)
+sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends -t noble "${GTK_PKGS[@]}" || {
+  echo "noble-pocket install failed; retrying against all pockets"
+  sudo apt-get "${APT_OPTS[@]}" update
+  sudo apt-get "${APT_OPTS[@]}" install -y --no-install-recommends "${GTK_PKGS[@]}"
+}
 
 export PATH="$(go env GOPATH)/bin:${PATH}"
 # The CLI pulls linux cgo packages if CGO is on; we have no host GTK.
