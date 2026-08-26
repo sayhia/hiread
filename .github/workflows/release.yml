@@ -40,6 +40,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      labels: ${{ steps.pkgs.outputs.labels }}
     steps:
       - id: v
         shell: bash
@@ -65,37 +66,41 @@ jobs:
           echo "prerelease=${PRE}" >> "${GITHUB_OUTPUT}"
           echo "Release ${TAG} (version ${VERSION}, prerelease=${PRE})"
 
+      # The package matrix is data so a partial rebuild can filter it at the
+      # source; a job-level `if` may not reference `matrix`.
+      - id: pkgs
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          cat > matrix.json <<'EOF'
+          [
+            { "os": "macos-latest",     "label": "darwin-arm64",  "kind": "macos",             "arch": "arm64", "mac_name": "AppleSilicon" },
+            { "os": "macos-latest",     "label": "darwin-amd64",  "kind": "macos",             "arch": "amd64", "mac_name": "Intel" },
+            { "os": "ubuntu-24.04-arm", "label": "linux-amd64",   "kind": "linux-amd64-cross" },
+            { "os": "ubuntu-24.04-arm", "label": "linux-arm64",   "kind": "linux" },
+            { "os": "windows-latest",   "label": "windows-amd64", "kind": "windows" }
+          ]
+          EOF
+
+          FILTERED="$(jq -c --arg p "${PLATFORMS}" '
+            [ $p | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))[] ] as $want
+            | if ($want | length) == 0 then .
+              else map(select(.label as $l | $want | index($l)))
+              end' matrix.json)"
+          if [[ "${FILTERED}" == "[]" ]]; then
+            echo "no matching platforms for input: ${PLATFORMS}" >&2
+            exit 1
+          fi
+          echo "labels=${FILTERED}" >> "${GITHUB_OUTPUT}"
+
   package:
     name: Package ${{ matrix.label }}
     needs: meta
-    # Rebuilding a single platform (workflow_dispatch inputs.platforms) must not
-    # re-run the whole matrix — each skipped job counts as success.
-    if: ${{ inputs.platforms == '' || contains(inputs.platforms, matrix.label) }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            label: darwin-arm64
-            kind: macos
-            arch: arm64
-            mac_name: AppleSilicon
-          - os: macos-latest
-            label: darwin-amd64
-            kind: macos
-            arch: amd64
-            mac_name: Intel
-          # ubuntu-24.04 x64 hangs installing GTK/WebKit -dev. Cross-compile
-          # amd64 on the ARM runner (native Go + amd64 GTK sysroot).
-          - os: ubuntu-24.04-arm
-            label: linux-amd64
-            kind: linux-amd64-cross
-          - os: ubuntu-24.04-arm
-            label: linux-arm64
-            kind: linux
-          - os: windows-latest
-            label: windows-amd64
-            kind: windows
+        include: ${{ fromJSON(needs.meta.outputs.labels) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     env:
