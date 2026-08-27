@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3" />
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5" />
   <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555" alt="macOS / Windows / Linux" />
-  <a href="https://github.com/sunmking/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sunmking/hiread" alt="GitHub release" /></a>
+  <a href="https://github.com/sayhia/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sayhia/hiread" alt="GitHub release" /></a>
 </p>
 
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -94,6 +94,8 @@ hiread-cli search "deliberately"         # full-text, across every book
 ```
 
 See [`cmd/hiread-cli/README.md`](cmd/hiread-cli/README.md) for the full reference.
+Prebuilt binaries for all six platform/arch targets ship on every
+[GitHub Release](https://github.com/sayhia/hiread/releases/latest) (`hiread-cli-*`).
 
 ## Tech stack
 
@@ -151,18 +153,22 @@ hiread/
 
 ## Download
 
-Installers are attached to every [GitHub Release](https://github.com/sunmking/hiread/releases/latest).
+Installers are attached to every [GitHub Release](https://github.com/sayhia/hiread/releases/latest).
 
-| Platform | File |
+| Platform | Files |
 | --- | --- |
-| macOS 12+ Apple 芯片（M 系列） | `Hiread-*-macOS-AppleSilicon.dmg` |
-| macOS 12+ Intel | `Hiread-*-macOS-Intel.dmg` |
-| Windows 10+ (x64) | `Hiread-*-windows-amd64-setup.exe` |
-| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+| macOS 12+ Apple silicon (M series) | `Hiread-*-macOS-AppleSilicon.dmg` · `.zip` |
+| macOS 12+ Intel | `Hiread-*-macOS-Intel.dmg` · `.zip` |
+| Windows 10+ (x64) | `Hiread-*-windows-amd64-setup.exe` · `.zip` |
+| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.pkg.tar.zst` · `.tar.gz` |
+| hiread-cli (agent-facing) | `hiread-cli-*-{darwin,linux,windows}-{amd64,arm64}[.exe]` + `SHA256SUMS.txt` |
 
 macOS builds are ad-hoc signed. First launch: right-click the app → Open. Windows is unsigned; SmartScreen may warn.
 
-To cut a release: `git tag v0.1.1 && git push origin v0.1.1`. GitHub Actions builds the packages and publishes the release.
+To cut a release: `git tag vX.Y.Z && git push origin vX.Y.Z`. GitHub Actions
+builds every package and publishes the Release automatically. To rebuild a
+single platform after a failure: `gh workflow run release.yml -f tag=vX.Y.Z -f platforms=linux-amd64`
+— fresh assets replace the broken ones and `SHA256SUMS.txt` is regenerated over the full set.
 
 ## Getting started
 
@@ -226,4 +232,4 @@ The full map lives in **Settings → Shortcuts**.
 
 ## License
 
-[MIT](LICENSE) — © 2026 sunmking
+[MIT](LICENSE) — © 2026 sayhia

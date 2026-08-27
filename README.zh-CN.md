@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" alt="Vue 3" />
   <img src="https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white" alt="SQLite FTS5" />
   <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-555" alt="macOS / Windows / Linux" />
-  <a href="https://github.com/sunmking/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sunmking/hiread" alt="GitHub release" /></a>
+  <a href="https://github.com/sayhia/hiread/releases/latest"><img src="https://img.shields.io/github/v/release/sayhia/hiread" alt="GitHub release" /></a>
 </p>
 
 <p align="center"><a href="README.md">English</a> · <strong>简体中文</strong></p>
@@ -86,6 +86,8 @@ hiread-cli search "闻者落泪"              # 全书库全文检索
 ```
 
 完整参考见 [`cmd/hiread-cli/README.md`](cmd/hiread-cli/README.md)。
+每次 [GitHub Release](https://github.com/sayhia/hiread/releases/latest) 都附带
+全部六个平台/架构的预编译二进制（`hiread-cli-*`）。
 
 ## 技术栈
 
@@ -138,18 +140,22 @@ hiread/
 
 ## 下载
 
-安装包在每次 [GitHub Release](https://github.com/sunmking/hiread/releases/latest) 中提供。
+安装包在每次 [GitHub Release](https://github.com/sayhia/hiread/releases/latest) 中提供。
 
 | 平台 | 文件 |
 | --- | --- |
-| macOS 12+ Apple 芯片（M 系列） | `Hiread-*-macOS-AppleSilicon.dmg` |
-| macOS 12+ Intel | `Hiread-*-macOS-Intel.dmg` |
-| Windows 10+（x64） | `Hiread-*-windows-amd64-setup.exe` |
-| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.tar.gz` |
+| macOS 12+ Apple 芯片（M 系列） | `Hiread-*-macOS-AppleSilicon.dmg` · `.zip` |
+| macOS 12+ Intel | `Hiread-*-macOS-Intel.dmg` · `.zip` |
+| Windows 10+（x64） | `Hiread-*-windows-amd64-setup.exe` · `.zip` |
+| Linux x64 / ARM64 | `.AppImage` · `.deb` · `.rpm` · `.pkg.tar.zst` · `.tar.gz` |
+| hiread-cli（面向 agent 的命令行） | `hiread-cli-*-{darwin,linux,windows}-{amd64,arm64}[.exe]` + `SHA256SUMS.txt` |
 
 macOS 为 ad-hoc 签名。第一次打开：右键应用 → 打开。Windows 未签名，SmartScreen 可能会提示。
 
-发布新版本：`git tag v0.1.1 && git push origin v0.1.1`。GitHub Actions 会构建各平台安装包并发布 Release。
+发布新版本：`git tag vX.Y.Z && git push origin vX.Y.Z`，GitHub Actions
+会自动构建各平台安装包并发布 Release。某平台构建失败时可以单独重建：
+`gh workflow run release.yml -f tag=vX.Y.Z -f platforms=linux-amd64`
+——新资产会替换损坏的同名文件，`SHA256SUMS.txt` 按全集重新生成。
 
 ## 开始使用
 
@@ -212,4 +218,4 @@ AI 与翻译是可选功能——在**设置**里填入相应的 API Key 才会�
 
 ## 许可
 
-[MIT](LICENSE) —— © 2026 sunmking
+[MIT](LICENSE) —— © 2026 sayhia
